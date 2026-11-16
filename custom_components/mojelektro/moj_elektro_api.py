@@ -84,7 +84,6 @@ class MojElektroApi:
                 self.validateData(cache)
 
                 #organize sensors
-                sensor_return.update(self.sensors_output(cache.get('15'), json.loads(SETUP_TAG_15_ARRAY)))
                 sensor_return.update(self.sensors_output(cache.get('meter'), json.loads(SETUP_TAG_ARRAY)))
                 
                 #calc consumption by blocks
@@ -95,8 +94,9 @@ class MojElektroApi:
                 sensor_return.update(casovni_blok)
 
 
-            self.last_data = sensor_return
-            return sensor_return
+            # Sensors without new data (e.g. too few readings) keep their last values.
+            self.last_data = {**(self.last_data or {}), **sensor_return}
+            return self.last_data
         else:
             _LOGGER.debug("Not time to update, returning last good data.")
             return self.last_data
@@ -134,12 +134,6 @@ class MojElektroApi:
         else:
             _LOGGER.debug("Cache has stored data. Will use self.cache.")
         return self.cache
-
-
-    def get15MinOffset(self):
-        """Get 15min index."""
-        now = datetime.now()
-        return int((now.hour * 60 + now.minute)/15)
 
 
     def find_tag(self, tag_to_find, data_list, search):
@@ -203,12 +197,7 @@ class MojElektroApi:
         """Organize sensors and calculate values."""
         sensor_output = {}
 
-        if not data:
-            #return 0 instead od unavailable
-            for item in json.loads(SETUP_TAG_15_ARRAY):
-                sensor_output[item["sensor"]] = "0.0"
-
-        else:
+        if data:
             for block in data:
                 reading_type = block.get("readingType", "")
 
@@ -216,24 +205,21 @@ class MojElektroApi:
                 tag = self.find_tag(reading_type, json.loads(READING_TYPE_ARRAY),1)
                 sensor = self.find_tag(tag, setup,3)
 
-                if sensor.split("_")[0] == "15min":
+                blockLen = len(block.get("intervalReadings", []))
+                # Early on the 2nd of a month only the 1st's reading exists: keep the last values.
+                if blockLen < 2:
+                    continue
 
-                    value = block.get("intervalReadings")[self.get15MinOffset()]['value']
-                    sensor_output[sensor] = str(round(float(value), self.decimal))
+                #calculate monthly energy
+                valuemonth = float(block.get("intervalReadings")[blockLen-1]['value']) - float(block.get("intervalReadings")[0]['value'])
 
-                else:
-                    blockLen = len(block.get("intervalReadings", []))
+                #calculate daily energy
+                value = float(block.get("intervalReadings")[blockLen-1]['value']) - float(block.get("intervalReadings")[blockLen-2]['value'])
 
-                    #calculate monthly energy
-                    valuemonth = float(block.get("intervalReadings")[blockLen-1]['value']) - float(block.get("intervalReadings")[0]['value'])
-
-                    #calculate daily energy
-                    value = float(block.get("intervalReadings")[blockLen-1]['value']) - float(block.get("intervalReadings")[blockLen-2]['value'])
-
-                    sensor_output[sensor] = str(round(value, self.decimal))
-                    sensorMontly = sensor.replace("daily", "monthly")    
-                    sensor_output[sensorMontly] = str(round(valuemonth, self.decimal))
-                    
+                sensor_output[sensor] = str(round(value, self.decimal))
+                sensorMontly = sensor.replace("daily", "monthly")    
+                sensor_output[sensorMontly] = str(round(valuemonth, self.decimal))
+                
         return sensor_output
 
 
@@ -261,7 +247,7 @@ class MojElektroApi:
             blockLen = len(cache.get("meter")[index]['intervalReadings'])
 
 
-            sum_et = round(float(cache.get("meter")[index]['intervalReadings'][blockLen-1]['value']) - float(cache.get("meter")[index]['intervalReadings'][blockLen-2]['value']), self.decimal)
+            sum_et = round(float(cache.get("meter")[index]['intervalReadings'][blockLen-1]['value']) - float(cache.get("meter")[index]['intervalReadings'][blockLen-2]['value']), self.decimal) if blockLen >= 2 else None
 
 
             if sum_15min == sum_et and sum_15min_part > 0 and cur_date == match_date:

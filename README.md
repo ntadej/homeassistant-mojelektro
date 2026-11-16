@@ -43,6 +43,27 @@ In Home Assistant
 > [!NOTE]
 > _As for version 0.2.0 there is no need for `configuration.yaml` file edit!_
 
+## Sensors
+
+Moj Elektro publishes a day's readings the next morning (usually around 5:30),
+so the sensors show finished days:
+
+- **Yesterday input/output** (entity IDs `*_daily_*`): energy of the previous
+  day, from the meter's daily readings. `peak`/`offpeak` are the high (VT) and
+  low (MT) tariff parts.
+- **Monthly input/output**: the current month up to the end of yesterday. On
+  the 1st it shows the whole previous month.
+- **Yesterday input blok 1-5**: yesterday's consumption per network time block.
+- **Casovni blok 1-5**: contracted power (dogovorjena moč) per time block, kW.
+- **Last reading**: see [15-minute readings for charts](#15-minute-readings-for-charts).
+
+Home Assistant also builds long-term statistics from these sensors, but at
+the time each value arrives, a day late. For energy at the hour it was used,
+use the [long-term statistics](#long-term-statistics) instead. Upgrading
+removes the old `15min_input`/`15min_output` sensors, which showed
+yesterday's reading for the current quarter-hour. Old statistics of these
+sensors can be deleted under **Developer tools > Statistics**.
+
 ### Houses without production
 
 If the house doesn't produce electricity (no solar), turn off **Produces

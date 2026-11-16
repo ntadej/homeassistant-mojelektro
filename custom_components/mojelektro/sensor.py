@@ -109,7 +109,7 @@ class MojElektroSensor(CoordinatorEntity, SensorEntity):
         entity_id = generate_entity_id( ENTITY_ID_FORMAT, f"{DOMAIN}_{measurement_name.lower()}", current_ids )
 
         self._attr_unique_id = f"{meter_id}-{entity_id}"
-        self._attr_name = f"Moj Elektro {measurement_name.replace('_', ' ')}"
+        self._attr_name = f"Moj Elektro {measurement_name.replace('daily', 'yesterday').replace('_', ' ')}"
         self.measurement_name = measurement_name
         self._last_known_state = None
 

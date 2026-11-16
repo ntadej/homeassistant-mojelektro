@@ -23,7 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Migrate existing entities to be grouped under a single device
     await migrate_existing_entities_to_device(hass, entry)
 
-    sync_output_entities(hass, entry)
+    sync_entity_registry(hass, entry)
 
     # Forward the setup to sensor platform
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
@@ -37,11 +37,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
 
-def sync_output_entities(hass: HomeAssistant, entry: ConfigEntry):
-    """Disable output (A-) sensors when the house doesn't produce electricity, re-enable them when it does."""
+def sync_entity_registry(hass: HomeAssistant, entry: ConfigEntry):
+    """Remove the old 15min sensors; disable output (A-) sensors without production, re-enable them with it."""
     registry = er.async_get(hass)
     production = has_production(entry)
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        # Replaced by long-term statistics and the last reading sensor.
+        if entity.unique_id.endswith(("_15min_input", "_15min_output")):
+            registry.async_remove(entity.entity_id)
+            continue
         if "_output" not in entity.unique_id:
             continue
         # Entities disabled by the user are left alone.
