@@ -4,6 +4,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import config_validation as cv
 from .const import DOMAIN
+from .config_flow import has_production
 import logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,6 +23,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Migrate existing entities to be grouped under a single device
     await migrate_existing_entities_to_device(hass, entry)
 
+    sync_output_entities(hass, entry)
+
     # Forward the setup to sensor platform
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     
@@ -33,6 +36,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
+
+def sync_output_entities(hass: HomeAssistant, entry: ConfigEntry):
+    """Disable output (A-) sensors when the house doesn't produce electricity, re-enable them when it does."""
+    registry = er.async_get(hass)
+    production = has_production(entry)
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if "_output" not in entity.unique_id:
+            continue
+        # Entities disabled by the user are left alone.
+        if not production and entity.disabled_by is None:
+            registry.async_update_entity(entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+        elif production and entity.disabled_by is er.RegistryEntryDisabler.INTEGRATION:
+            registry.async_update_entity(entity.entity_id, disabled_by=None)
+
 
 async def migrate_existing_entities_to_device(hass: HomeAssistant, entry: ConfigEntry):
     """Migrate old entities without devices to a single device."""

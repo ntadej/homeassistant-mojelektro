@@ -25,6 +25,7 @@ import os
 import json
 
 from .const import DOMAIN, CONF_TOKEN, CONF_METER_ID, CONF_DECIMAL
+from .config_flow import has_production
 from .moj_elektro_api import MojElektroApi  # Ensure this matches the actual location and name
 from .statistics import async_import_statistics
 import logging
@@ -71,6 +72,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         MojElektroSensor(coordinator, entry.entry_id, measurement, meter_id, hass, version)
         for measurement in coordinator.data.keys()
     ]
+    # Output sensors created for the first time follow the production setting.
+    for sensor in sensors:
+        if "output" in sensor.measurement_name:
+            sensor._attr_entity_registry_enabled_default = has_production(entry)
 
     # Hourly import of 15-minute readings into long-term statistics
     statistics = DataUpdateCoordinator(

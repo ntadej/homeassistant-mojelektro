@@ -43,6 +43,15 @@ In Home Assistant
 > [!NOTE]
 > _As for version 0.2.0 there is no need for `configuration.yaml` file edit!_
 
+### Houses without production
+
+If the house doesn't produce electricity (no solar), turn off **Produces
+electricity**, either when adding the integration or later under
+**Settings > Devices & services > Moj Elektro > Configure**. The output
+sensors (`*_output*`) are then disabled; their history is kept and they are
+enabled again if you turn the setting back on. Sensors you disabled yourself
+are left alone.
+
 ## Long-term statistics
 
 The sensors above can only show data at the time Home Assistant fetches it,

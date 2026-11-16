@@ -3,7 +3,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .moj_elektro_api import MojElektroApi
-from .const import DOMAIN, CONF_TOKEN, CONF_METER_ID, CONF_DECIMAL  # Assuming you define CONF_DECIMAL in your .const module
+from .const import DOMAIN, CONF_TOKEN, CONF_METER_ID, CONF_DECIMAL, CONF_PRODUCTION  # Assuming you define CONF_DECIMAL in your .const module
 
 class MojeElektroFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
@@ -24,9 +24,33 @@ class MojeElektroFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(CONF_TOKEN): str,
                 vol.Required(CONF_METER_ID): str,
-                vol.Optional(CONF_DECIMAL): vol.All(vol.Coerce(float), vol.Range(min=0, max=10))
+                vol.Optional(CONF_DECIMAL): vol.All(vol.Coerce(float), vol.Range(min=0, max=10)),
+                vol.Optional(CONF_PRODUCTION, default=True): bool,
 
                 #vol.Optional(CONF_DECIMAL): int  # New field for Decimal input
             }),
             errors=errors,
         )
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        return MojElektroOptionsFlow()
+
+
+class MojElektroOptionsFlow(config_entries.OptionsFlowWithReload):
+    """Options: whether the house produces electricity (output sensors)."""
+
+    async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Required(CONF_PRODUCTION, default=has_production(self.config_entry)): bool,
+            }),
+        )
+
+
+def has_production(entry):
+    """Whether output (A-) sensors are enabled; the option overrides the setup value."""
+    return entry.options.get(CONF_PRODUCTION, entry.data.get(CONF_PRODUCTION, True))
