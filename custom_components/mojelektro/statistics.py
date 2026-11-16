@@ -35,7 +35,10 @@ REWRITE_DAYS = 7
 MAX_SPAN_DAYS = 35
 MAX_AGE_YEARS = 3
 # Energy statistics with a running sum; a missing one makes the next run back-fill all.
-ENERGY_KINDS = ("consumption", "return", "consumption_vt", "consumption_mt")
+BLOCKS = (1, 2, 3, 4, 5)
+ENERGY_KINDS = ("consumption", "return", "consumption_vt", "consumption_mt") + tuple(
+    f"consumption_blok_{b}" for b in BLOCKS
+)
 # Contracted power statistics start here (time blocks are billed from October 2024).
 CONTRACT_START = date(2024, 1, 1)
 
@@ -92,12 +95,14 @@ async def async_import_statistics(hass, api, meter_id):
 
     tz = dt_util.get_default_time_zone()
     tariffs = await hass.async_add_executor_job(split, consumption, partial(_energy_tariff, api, tz), ("vt", "mt"))
+    by_block = await hass.async_add_executor_job(split, consumption, partial(_time_block, api, tz), BLOCKS)
 
     for kind, name, readings in (
         ("consumption", "consumption", consumption),
         ("return", "return", returned),
         ("consumption_vt", "consumption VT", tariffs["vt"]),
         ("consumption_mt", "consumption MT", tariffs["mt"]),
+        *((f"consumption_blok_{b}", f"consumption blok {b}", by_block[b]) for b in BLOCKS),
     ):
         await _async_import_energy(hass, statistic_id(meter_id, kind), name, readings, start, settled_before)
     _import_power(hass, statistic_id(meter_id, "power"), consumption, start, settled_before)
@@ -120,6 +125,11 @@ def _energy_tariff(api, tz, hour):
     """Energy tariff of an hour: VT on workdays 6:00-22:00, MT otherwise (matches the meter's registers)."""
     local = hour.astimezone(tz)
     return "vt" if 6 <= local.hour < 22 and not api.is_weekend_or_holiday(local) else "mt"
+
+
+def _time_block(api, tz, hour):
+    """Network time block (1-5) of an hour; blocks change on whole hours."""
+    return api.calculate_tariff((hour.astimezone(tz) + INTERVAL).isoformat())
 
 
 async def _async_last_day(hass, stat_id):

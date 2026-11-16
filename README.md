@@ -85,6 +85,9 @@ to. These statistics are hourly, the finest resolution Home Assistant stores:
 - `mojelektro:<meter_id>_consumption_vt` and `_consumption_mt`: consumption
   split into the high (VT, workdays 6:00-22:00) and low (MT, nights, weekends
   and holidays) energy tariff, kWh. This matches the meter's VT/MT registers.
+- `mojelektro:<meter_id>_consumption_blok_1` to `_5`: consumption per network
+  time block, kWh, for the network charge. Don't add them to the Energy
+  dashboard together with consumption or VT/MT: they split the same energy.
 - `mojelektro:<meter_id>_power`: hourly mean, minimum and maximum of the
   15-minute average power, kW. The maximum is the highest 15-minute load in
   that hour, which is what contracted power (dogovorjena moč) is compared to.
