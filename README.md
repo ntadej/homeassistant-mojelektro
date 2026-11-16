@@ -76,8 +76,10 @@ How the import works:
 
 ### 15-minute readings for charts
 
-`sensor.moj_elektro_last_reading` shows the end of the newest reading. Its
-attributes hold the readings of the last 7 days, for charts:
+The **Moj Elektro last reading** sensor shows the end of the newest reading.
+Its entity ID is `sensor.moj_elektro_last_reading`, or with the area in front
+(e.g. `sensor.home_moj_elektro_last_reading`) if the device is in an area.
+Its attributes hold the readings of the last 7 days, for charts:
 
 - `start`: start of the first interval (ISO timestamp, UTC).
 - `consumption`, `return`: kWh per 15 minutes from `start`, `null` where a
