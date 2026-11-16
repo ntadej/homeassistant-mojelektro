@@ -82,6 +82,9 @@ to. These statistics are hourly, the finest resolution Home Assistant stores:
 
 - `mojelektro:<meter_id>_consumption`: energy received from the grid, kWh.
 - `mojelektro:<meter_id>_return`: energy delivered to the grid, kWh.
+- `mojelektro:<meter_id>_consumption_vt` and `_consumption_mt`: consumption
+  split into the high (VT, workdays 6:00-22:00) and low (MT, nights, weekends
+  and holidays) energy tariff, kWh. This matches the meter's VT/MT registers.
 - `mojelektro:<meter_id>_power`: hourly mean, minimum and maximum of the
   15-minute average power, kW. The maximum is the highest 15-minute load in
   that hour, which is what contracted power (dogovorjena moč) is compared to.
@@ -93,7 +96,8 @@ to. These statistics are hourly, the finest resolution Home Assistant stores:
 `<meter_id>` is lowercase with `-` replaced by `_`, e.g. `6_18246`.
 
 Add the consumption and return statistics as grid consumption and return in
-**Settings > Dashboards > Energy**. The power statistic can be shown with a
+**Settings > Dashboards > Energy**. With a dual-tariff energy price, add the
+VT and MT statistics instead of the total consumption, each with its price. The power statistic can be shown with a
 statistics graph card.
 
 How the import works:
@@ -104,6 +108,8 @@ How the import works:
   Statistics imported by an older version cover only 2 years. To import the
   third, delete the `mojelektro:` statistics under **Developer tools >
   Statistics** and reload the integration.
+- When an update adds a new energy statistic, the next run imports it for
+  the whole 3 years and re-imports the others with the same values.
 - Every run re-imports the last 7 days, so readings that arrive late or are
   corrected by Moj Elektro replace the old values.
 - An hour is imported only once all four of its readings are there. After 7

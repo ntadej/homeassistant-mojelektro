@@ -42,6 +42,24 @@ def hourly(readings, start, settled_before):
     return out
 
 
+def split(readings, classify, classes):
+    """Split {interval start: kWh} into {class: {interval start: kWh}} by the class of each interval's hour.
+
+    Every class gets every interval, with 0 outside the class, so each split
+    series has the same complete hours as `readings`. `classify` gets the
+    UTC hour start and is called once per hour.
+    """
+    hour_class = {}
+    out = {c: {} for c in classes}
+    for t, value in readings.items():
+        hour = t.replace(minute=0)
+        if hour not in hour_class:
+            hour_class[hour] = classify(hour)
+        for c in classes:
+            out[c][t] = value if hour_class[hour] == c else 0.0
+    return out
+
+
 def profile(readings, since):
     """Return (since, [kWh or None per 15 minutes]) up to the newest reading."""
     if not readings:

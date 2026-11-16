@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import date, timedelta
+from functools import partial
 import logging
 import re
 
@@ -23,7 +24,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, READING_TYPE_15MIN_IMPORT, READING_TYPE_15MIN_EXPORT
-from .readings import INTERVAL, contracted_power, parse, hourly, profile
+from .readings import INTERVAL, contracted_power, parse, hourly, profile, split
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +34,8 @@ REWRITE_DAYS = 7
 # (its error message says 2 years, but 3 are served).
 MAX_SPAN_DAYS = 35
 MAX_AGE_YEARS = 3
+# Energy statistics with a running sum; a missing one makes the next run back-fill all.
+ENERGY_KINDS = ("consumption", "return", "consumption_vt", "consumption_mt")
 # Contracted power statistics start here (time blocks are billed from October 2024).
 CONTRACT_START = date(2024, 1, 1)
 
@@ -52,13 +55,14 @@ def years_back(day, years):
 
 async def async_import_statistics(hass, api, meter_id):
     """Fetch new 15-minute readings, import hourly statistics, return the recent profile."""
-    consumption_id = statistic_id(meter_id, "consumption")
     today = dt_util.now().date()
     settled_before = dt_util.as_utc(dt_util.start_of_local_day(today - timedelta(days=REWRITE_DAYS)))
 
-    last_day = await _async_last_day(hass, consumption_id)
-    if last_day:
-        fetch_from = min(last_day, today - timedelta(days=REWRITE_DAYS))
+    # Continue from the series that is furthest behind; a new series (e.g. added
+    # by an update) back-fills everything, rewriting the others unchanged.
+    last_days = [await _async_last_day(hass, statistic_id(meter_id, kind)) for kind in ENERGY_KINDS]
+    if all(last_days):
+        fetch_from = min(*last_days, today - timedelta(days=REWRITE_DAYS))
     else:
         fetch_from = years_back(today, MAX_AGE_YEARS)
     start = dt_util.as_utc(dt_util.start_of_local_day(fetch_from))
@@ -86,8 +90,16 @@ async def async_import_statistics(hass, api, meter_id):
     consumption = parse(blocks, READING_TYPE_15MIN_IMPORT)
     returned = parse(blocks, READING_TYPE_15MIN_EXPORT)
 
-    await _async_import_energy(hass, consumption_id, "consumption", consumption, start, settled_before)
-    await _async_import_energy(hass, statistic_id(meter_id, "return"), "return", returned, start, settled_before)
+    tz = dt_util.get_default_time_zone()
+    tariffs = await hass.async_add_executor_job(split, consumption, partial(_energy_tariff, api, tz), ("vt", "mt"))
+
+    for kind, name, readings in (
+        ("consumption", "consumption", consumption),
+        ("return", "return", returned),
+        ("consumption_vt", "consumption VT", tariffs["vt"]),
+        ("consumption_mt", "consumption MT", tariffs["mt"]),
+    ):
+        await _async_import_energy(hass, statistic_id(meter_id, kind), name, readings, start, settled_before)
     _import_power(hass, statistic_id(meter_id, "power"), consumption, start, settled_before)
     if consumption:
         await _async_import_contracted_power(
@@ -102,6 +114,12 @@ async def async_import_statistics(hass, api, meter_id):
         "consumption": consumption_profile,
         "return": return_profile,
     }
+
+
+def _energy_tariff(api, tz, hour):
+    """Energy tariff of an hour: VT on workdays 6:00-22:00, MT otherwise (matches the meter's registers)."""
+    local = hour.astimezone(tz)
+    return "vt" if 6 <= local.hour < 22 and not api.is_weekend_or_holiday(local) else "mt"
 
 
 async def _async_last_day(hass, stat_id):

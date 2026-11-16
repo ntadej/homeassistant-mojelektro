@@ -123,3 +123,20 @@ def test_contracted_power_skips_hours_without_period():
     periods = [{"datumOd": "2026-01-01T00:00:00Z", "datumDo": "2026-12-31T00:00:00Z", "veljavnost": True, "casovniBlok3": "4.0"}]
     hours = readings.contracted_power(periods, lambda end: 3, datetime(2025, 12, 31, 21, tzinfo=UTC), datetime(2025, 12, 31, 23, tzinfo=UTC), LJ)
     assert hours == [(datetime(2025, 12, 31, 23, tzinfo=UTC), 4.0)]  # 00:00 local on Jan 1
+
+
+def test_split_by_hour_class_keeps_every_interval():
+    parsed = readings.parse([block(datetime(2026, 11, 16), 96)], READING_TYPE)
+    calls = []
+
+    def classify(hour):
+        calls.append(hour)
+        return "vt" if 6 <= hour.astimezone(LJ).hour < 22 else "mt"
+
+    parts = readings.split(parsed, classify, ("vt", "mt"))
+    assert len(calls) == 24  # once per hour
+    assert set(parts["vt"]) == set(parts["mt"]) == set(parsed)
+    assert round(sum(parts["vt"].values()), 4) == 6.4 and round(sum(parts["mt"].values()), 4) == 3.2
+    start = datetime(2026, 11, 15, 23, tzinfo=UTC)
+    hours = readings.hourly(parts["mt"], start, settled_before=start)
+    assert len(hours) == 24 and sum(hours[6][1]) == 0 and round(sum(hours[0][1]), 4) == 0.4
