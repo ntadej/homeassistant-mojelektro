@@ -26,8 +26,10 @@ import json
 
 from .const import DOMAIN, CONF_TOKEN, CONF_METER_ID, CONF_DECIMAL
 from .moj_elektro_api import MojElektroApi  # Ensure this matches the actual location and name
+from .statistics import async_import_statistics
 import logging
 from datetime import timedelta
+from functools import partial
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +71,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         MojElektroSensor(coordinator, entry.entry_id, measurement, meter_id, hass, version)
         for measurement in coordinator.data.keys()
     ]
+
+    # Hourly import of 15-minute readings into long-term statistics
+    statistics = DataUpdateCoordinator(
+        hass,
+        _LOGGER,
+        config_entry=entry,
+        name="mojelektro_statistics",
+        update_method=partial(async_import_statistics, hass, api, meter_id),
+        update_interval=timedelta(hours=1),
+    )
+    # In the background: the first run back-fills up to 2 years in 35-day requests.
+    entry.async_create_background_task(hass, statistics.async_refresh(), "mojelektro statistics import")
+    sensors.append(MojElektroLastReadingSensor(statistics, meter_id))
+
     async_add_entities(sensors)
 
 
@@ -136,6 +152,31 @@ class MojElektroSensor(CoordinatorEntity, SensorEntity):
             return self._last_known_state
             
         return None
+
+class MojElektroLastReadingSensor(CoordinatorEntity, SensorEntity):
+    """End of the newest 15-minute reading, with the last days of readings as attributes."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:chart-bar"
+    # Up to ~1350 values: for charts only, keep them out of the database.
+    _unrecorded_attributes = frozenset({"start", "consumption", "return"})
+
+    def __init__(self, coordinator, meter_id):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{meter_id}-last_reading"
+        self._attr_name = "Moj Elektro last reading"
+        self._attr_device_info = {"identifiers": {(DOMAIN, meter_id)}}
+
+    @property
+    def native_value(self):
+        return self.coordinator.data["last_reading"] if self.coordinator.data else None
+
+    @property
+    def extra_state_attributes(self):
+        if not self.coordinator.data:
+            return None
+        return {key: self.coordinator.data[key] for key in ("start", "consumption", "return")}
+
 
 def _get_version() -> str:
     """Get the version from the manifest.json"""

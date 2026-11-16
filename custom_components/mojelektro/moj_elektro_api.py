@@ -4,7 +4,7 @@ import aiohttp
 import logging
 from dateutil import parser
 
-from .const import SETUP_TAG_15_ARRAY, SETUP_TAG_ARRAY, READING_TYPE_ARRAY, SETUP_TAG_BLOCKS_ARRAY
+from .const import SETUP_TAG_15_ARRAY, SETUP_TAG_ARRAY, READING_TYPE_ARRAY, SETUP_TAG_BLOCKS_ARRAY, READING_TYPE_15MIN_IMPORT, READING_TYPE_15MIN_EXPORT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +51,17 @@ class MojElektroApi:
         except aiohttp.ClientError as e:
             _LOGGER.error(f"Error making API call: {e}")
             return None
+
+
+    async def get_15min_readings(self, start, end):
+        """Return the 15-minute A+ and A- interval blocks from start to end (at most 35 days), or None."""
+        url = (
+            f"https://api.informatika.si/mojelektro/v1/meter-readings?usagePoint={self.meter_id}"
+            f"&startTime={start:%Y-%m-%d}&endTime={end:%Y-%m-%d}"
+            f"&option=ReadingType%3D{READING_TYPE_15MIN_IMPORT}&option=ReadingType%3D{READING_TYPE_15MIN_EXPORT}"
+        )
+        data = await self._fetch_data(url, {"accept": "application/json", "X-API-TOKEN": self.token})
+        return data.get("intervalBlocks", []) if data is not None else None
 
 
     async def getData(self):

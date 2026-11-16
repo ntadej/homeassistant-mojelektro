@@ -43,6 +43,65 @@ In Home Assistant
 > [!NOTE]
 > _As for version 0.2.0 there is no need for `configuration.yaml` file edit!_
 
+## Long-term statistics
+
+The sensors above can only show data at the time Home Assistant fetches it,
+which is a day late. The integration therefore also imports the 15-minute
+readings into Home Assistant's long-term statistics, at the hour they belong
+to. These statistics are hourly, the finest resolution Home Assistant stores:
+
+- `mojelektro:<meter_id>_consumption`: energy received from the grid, kWh.
+- `mojelektro:<meter_id>_return`: energy delivered to the grid, kWh.
+- `mojelektro:<meter_id>_power`: hourly mean, minimum and maximum of the
+  15-minute average power, kW. The maximum is the highest 15-minute load in
+  that hour, which is what contracted power (dogovorjena moč) is compared to.
+
+`<meter_id>` is lowercase with `-` replaced by `_`, e.g. `6_18246`.
+
+Add the consumption and return statistics as grid consumption and return in
+**Settings > Dashboards > Energy**. The power statistic can be shown with a
+statistics graph card.
+
+How the import works:
+
+- It runs at startup and then every hour.
+- The first run imports the last 2 years, the most the API allows. It runs in
+  the background and takes about a minute.
+- Every run re-imports the last 7 days, so readings that arrive late or are
+  corrected by Moj Elektro replace the old values.
+- An hour is imported only once all four of its readings are there. After 7
+  days an hour is imported with whatever readings exist.
+- If the API is unavailable, nothing is lost: the next successful run fills
+  the gap.
+
+### 15-minute readings for charts
+
+`sensor.moj_elektro_last_reading` shows the end of the newest reading. Its
+attributes hold the readings of the last 7 days, for charts:
+
+- `start`: start of the first interval (ISO timestamp, UTC).
+- `consumption`, `return`: kWh per 15 minutes from `start`, `null` where a
+  reading is missing.
+
+The attributes are not stored in the database. For example, with
+[apexcharts-card](https://github.com/RomRider/apexcharts-card):
+
+```yaml
+type: custom:apexcharts-card
+graph_span: 7d
+span:
+  end: day
+  offset: -1d
+series:
+  - entity: sensor.moj_elektro_last_reading
+    name: Consumption
+    type: column
+    unit: kW
+    data_generator: |
+      const start = Date.parse(entity.attributes.start);
+      return entity.attributes.consumption.map((v, i) => [start + i * 900000, v === null ? null : v * 4]);
+```
+
 ## Network Tariff Blocks
 If you are also searching for current tariff blocks (omrežnina), you can find integration here:
 
@@ -59,7 +118,7 @@ https://github.com/frlequ/network-tariff-card
 - [X] Add decimals options for meters
 - [X] Add tariff block power
 - [X] Add energy consumption by blocks
-- [ ] Add option to save to long term statistics
+- [X] Add option to save to long term statistics
 - [X] Multi-language Support
     - [X] English
     - [ ] Slovenian
