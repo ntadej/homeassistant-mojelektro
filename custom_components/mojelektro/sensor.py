@@ -178,6 +178,11 @@ class MojElektroLastReadingSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = {"identifiers": {(DOMAIN, meter_id)}}
 
     @property
+    def available(self):
+        # A failed import (e.g. HTTP 500) keeps the coordinator's last data: show it.
+        return self.coordinator.data is not None
+
+    @property
     def native_value(self):
         return self.coordinator.data["last_reading"] if self.coordinator.data else None
 
