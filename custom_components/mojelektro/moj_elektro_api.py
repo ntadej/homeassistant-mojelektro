@@ -267,6 +267,11 @@ class MojElektroApi:
 
     async def get_casovni_blok(self):
         """Get the 'casovni blok' values where 'veljavnost' is true and 'vrsta' is 'OMTO'."""
+        dogovorjene_moci = await self.get_dogovorjene_moci()
+        return self._extract_casovni_bloki(dogovorjene_moci) if dogovorjene_moci else {}
+
+    async def get_dogovorjene_moci(self):
+        """Get all contracted power periods ('dogovorjeneMoci') of the OMTO metering point, or None."""
         url = f'https://api.informatika.si/mojelektro/v1/merilno-mesto/{self.meter_id}'
         headers = {"accept": "application/json", "X-API-TOKEN": self.token}
 
@@ -277,7 +282,7 @@ class MojElektroApi:
                 if gsrn_omto:
                     gsrn_data = await self._fetch_gsrn_data(gsrn_omto, headers)
                     if gsrn_data:
-                        return self._extract_casovni_bloki(gsrn_data.get('dogovorjeneMoci', []))
+                        return gsrn_data.get('dogovorjeneMoci', [])
                     else:
                         _LOGGER.error("Failed to fetch GSRN data.")
                 else:
@@ -287,7 +292,7 @@ class MojElektroApi:
         except aiohttp.ClientError as e:
             _LOGGER.error(f"Error making API call: {e}")
 
-        return {}
+        return None
 
     async def _fetch_data(self, url, headers):
         """Fetch data from the given URL."""
@@ -416,7 +421,6 @@ class MojElektroApi:
         
         # Check if the date matches any public holiday
         if (date.month, date.day) in public_holidays:
-            print("hollyday")
             return True
 
         return False

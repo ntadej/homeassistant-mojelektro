@@ -1,7 +1,7 @@
 """Import Moj Elektro 15-minute readings into long-term statistics."""
 
 import asyncio
-from datetime import timedelta
+from datetime import date, timedelta
 import logging
 import re
 
@@ -23,7 +23,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, READING_TYPE_15MIN_IMPORT, READING_TYPE_15MIN_EXPORT
-from .readings import INTERVAL, parse, hourly, profile
+from .readings import INTERVAL, contracted_power, parse, hourly, profile
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +33,8 @@ REWRITE_DAYS = 7
 # (its error message says 2 years, but 3 are served).
 MAX_SPAN_DAYS = 35
 MAX_AGE_YEARS = 3
+# Contracted power statistics start here (time blocks are billed from October 2024).
+CONTRACT_START = date(2024, 1, 1)
 
 
 def statistic_id(meter_id, kind):
@@ -54,11 +56,8 @@ async def async_import_statistics(hass, api, meter_id):
     today = dt_util.now().date()
     settled_before = dt_util.as_utc(dt_util.start_of_local_day(today - timedelta(days=REWRITE_DAYS)))
 
-    last = await get_instance(hass).async_add_executor_job(
-        get_last_statistics, hass, 1, consumption_id, True, set()
-    )
-    if last.get(consumption_id):
-        last_day = dt_util.as_local(dt_util.utc_from_timestamp(last[consumption_id][0]["start"])).date()
+    last_day = await _async_last_day(hass, consumption_id)
+    if last_day:
         fetch_from = min(last_day, today - timedelta(days=REWRITE_DAYS))
     else:
         fetch_from = years_back(today, MAX_AGE_YEARS)
@@ -90,6 +89,10 @@ async def async_import_statistics(hass, api, meter_id):
     await _async_import_energy(hass, consumption_id, "consumption", consumption, start, settled_before)
     await _async_import_energy(hass, statistic_id(meter_id, "return"), "return", returned, start, settled_before)
     _import_power(hass, statistic_id(meter_id, "power"), consumption, start, settled_before)
+    if consumption:
+        await _async_import_contracted_power(
+            hass, api, statistic_id(meter_id, "contracted_power"), today, max(consumption).replace(minute=0)
+        )
 
     since, consumption_profile = profile(consumption, settled_before)
     _, return_profile = profile(returned, settled_before)
@@ -99,6 +102,49 @@ async def async_import_statistics(hass, api, meter_id):
         "consumption": consumption_profile,
         "return": return_profile,
     }
+
+
+async def _async_last_day(hass, stat_id):
+    """Local date of the newest stored hour of a statistic, or None."""
+    last = await get_instance(hass).async_add_executor_job(get_last_statistics, hass, 1, stat_id, True, set())
+    if not last.get(stat_id):
+        return None
+    return dt_util.as_local(dt_util.utc_from_timestamp(last[stat_id][0]["start"])).date()
+
+
+async def _async_import_contracted_power(hass, api, stat_id, today, last_hour):
+    """Import the contracted power of each hour's time block, up to `last_hour`."""
+    periods = await api.get_dogovorjene_moci()
+    if not periods:
+        _LOGGER.warning("No contracted power periods, skipping their statistics")
+        return
+
+    last_day = await _async_last_day(hass, stat_id)
+    first_day = min(last_day, today - timedelta(days=REWRITE_DAYS)) if last_day else CONTRACT_START
+    hours = await hass.async_add_executor_job(
+        contracted_power,
+        periods,
+        api.calculate_tariff,
+        dt_util.as_utc(dt_util.start_of_local_day(first_day)),
+        last_hour,
+        dt_util.get_default_time_zone(),
+    )
+    if not hours:
+        return
+
+    async_add_external_statistics(
+        hass,
+        StatisticMetaData(
+            mean_type=StatisticMeanType.ARITHMETIC,
+            has_sum=False,
+            name="Moj Elektro contracted power",
+            source=DOMAIN,
+            statistic_id=stat_id,
+            unit_class="power",
+            unit_of_measurement=UnitOfPower.KILO_WATT,
+        ),
+        [StatisticData(start=hour, mean=kw, min=kw, max=kw) for hour, kw in hours],
+    )
 
 
 async def _async_import_energy(hass, stat_id, name, readings, start, settled_before):

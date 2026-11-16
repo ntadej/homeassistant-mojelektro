@@ -48,3 +48,26 @@ def profile(readings, since):
         return since, []
     slots = int((max(readings) - since) / INTERVAL) + 1
     return since, [readings.get(since + i * INTERVAL) for i in range(max(slots, 0))]
+
+
+def contracted_power(periods, calculate_tariff, first, last, tz):
+    """Return [(UTC hour, kW)] from `first` to `last`: the contracted power of the hour's time block.
+
+    `periods` are the API's 'dogovorjeneMoci'; `calculate_tariff` maps an
+    interval end timestamp to its block (1-5). Blocks change on whole hours.
+    """
+    valid = [
+        (datetime.fromisoformat(p["datumOd"]).date(), datetime.fromisoformat(p["datumDo"]).date(), p)
+        for p in periods
+        if p.get("veljavnost")
+    ]
+    out = []
+    hour = first
+    while hour <= last:
+        local = hour.astimezone(tz)
+        period = next((p for start, end, p in valid if start <= local.date() <= end), None)
+        value = period and period.get(f"casovniBlok{calculate_tariff((local + INTERVAL).isoformat())}")
+        if value is not None:
+            out.append((hour, float(value)))
+        hour += HOUR
+    return out

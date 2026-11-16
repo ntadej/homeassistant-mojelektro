@@ -85,6 +85,10 @@ to. These statistics are hourly, the finest resolution Home Assistant stores:
 - `mojelektro:<meter_id>_power`: hourly mean, minimum and maximum of the
   15-minute average power, kW. The maximum is the highest 15-minute load in
   that hour, which is what contracted power (dogovorjena moč) is compared to.
+- `mojelektro:<meter_id>_contracted_power`: contracted power (dogovorjena
+  moč) of the time block each hour belongs to, kW, from January 2024. Shown
+  with the `_power` maximum in one statistics graph, it tells when the
+  15-minute load came close to or over the contracted power.
 
 `<meter_id>` is lowercase with `-` replaced by `_`, e.g. `6_18246`.
 
