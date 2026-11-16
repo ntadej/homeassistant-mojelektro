@@ -16,6 +16,7 @@ from homeassistant.const import (
 
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import PlatformNotReady
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import generate_entity_id
@@ -60,6 +61,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     # Fetch initial data
     await coordinator.async_refresh()
+    # Sensors are created from the first reply; without it none would exist
+    # until a reload, so let HA retry the setup.
+    if not coordinator.data:
+        raise PlatformNotReady("No data from the Moj Elektro API yet")
 
     # Store coordinator for reference in sensor entities
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
