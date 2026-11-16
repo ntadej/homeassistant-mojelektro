@@ -29,14 +29,23 @@ _LOGGER = logging.getLogger(__name__)
 
 # Days re-imported on every run, so late or corrected readings replace old ones.
 REWRITE_DAYS = 7
-# API limits: one request spans at most 35 days and starts at most 2 years back.
+# API limits: one request spans at most 35 days and starts at most 3 years back
+# (its error message says 2 years, but 3 are served).
 MAX_SPAN_DAYS = 35
-MAX_AGE_DAYS = 730
+MAX_AGE_YEARS = 3
 
 
 def statistic_id(meter_id, kind):
     """Return the external statistic ID for a meter, e.g. mojelektro:6_18246_consumption."""
     return f"{DOMAIN}:{re.sub(r'[^a-z0-9]+', '_', meter_id.lower()).strip('_')}_{kind}"
+
+
+def years_back(day, years):
+    """The same date `years` earlier (Feb 29 becomes Feb 28)."""
+    try:
+        return day.replace(year=day.year - years)
+    except ValueError:
+        return day.replace(year=day.year - years, day=28)
 
 
 async def async_import_statistics(hass, api, meter_id):
@@ -52,7 +61,7 @@ async def async_import_statistics(hass, api, meter_id):
         last_day = dt_util.as_local(dt_util.utc_from_timestamp(last[consumption_id][0]["start"])).date()
         fetch_from = min(last_day, today - timedelta(days=REWRITE_DAYS))
     else:
-        fetch_from = today - timedelta(days=MAX_AGE_DAYS)
+        fetch_from = years_back(today, MAX_AGE_YEARS)
     start = dt_util.as_utc(dt_util.start_of_local_day(fetch_from))
 
     blocks = []

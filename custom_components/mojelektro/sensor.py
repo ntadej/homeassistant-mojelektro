@@ -86,7 +86,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         update_method=partial(async_import_statistics, hass, api, meter_id),
         update_interval=timedelta(hours=1),
     )
-    # In the background: the first run back-fills up to 2 years in 35-day requests.
+    # In the background: the first run back-fills up to 3 years in 35-day requests.
     entry.async_create_background_task(hass, statistics.async_refresh(), "mojelektro statistics import")
     sensors.append(MojElektroLastReadingSensor(statistics, meter_id))
 

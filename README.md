@@ -95,8 +95,11 @@ statistics graph card.
 How the import works:
 
 - It runs at startup and then every hour.
-- The first run imports the last 2 years, the most the API allows. It runs in
-  the background and takes about a minute.
+- The first run imports the last 3 years, the most the API allows. It runs in
+  the background and takes about 3 minutes.
+  Statistics imported by an older version cover only 2 years. To import the
+  third, delete the `mojelektro:` statistics under **Developer tools >
+  Statistics** and reload the integration.
 - Every run re-imports the last 7 days, so readings that arrive late or are
   corrected by Moj Elektro replace the old values.
 - An hour is imported only once all four of its readings are there. After 7
