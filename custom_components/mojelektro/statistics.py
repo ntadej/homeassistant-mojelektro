@@ -181,7 +181,8 @@ async def _async_import_energy(hass, stat_id, name, readings, start, settled_bef
     if not hours:
         return
 
-    # The sum just before the first rewritten hour; daily rows skip small gaps.
+    # The sum just before the first rewritten hour. Not "day" rows: HA rounds
+    # the end up to a whole day, returning the rewritten day's own end sum.
     first = hours[0][0]
     before = await get_instance(hass).async_add_executor_job(
         statistics_during_period,
@@ -189,7 +190,7 @@ async def _async_import_energy(hass, stat_id, name, readings, start, settled_bef
         first - timedelta(days=MAX_SPAN_DAYS),
         first,
         {stat_id},
-        "day",
+        "hour",
         None,
         {"sum"},
     )
